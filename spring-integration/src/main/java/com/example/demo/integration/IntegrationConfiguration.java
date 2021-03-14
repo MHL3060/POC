@@ -1,27 +1,30 @@
 package com.example.demo.integration;
 
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.integration.annotation.MessagingGateway;
-import org.springframework.integration.annotation.ServiceActivator;
+import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.integration.dsl.MessageChannels;
-import org.springframework.integration.dsl.MessageHandlerSpec;
+import org.springframework.integration.handler.LoggingHandler;
 import org.springframework.integration.http.HttpHeaders;
 import org.springframework.integration.http.dsl.Http;
 import org.springframework.messaging.MessageChannel;
 
 
 @Configuration
+@EnableIntegration
 public class IntegrationConfiguration {
 
     // curl http://localhost:8080/tasks --data '{"username":"xyz","password":"xyz"}' -H 'Content-type: application/json'
     @Bean
     MessageChannel directChannel() {
+        return MessageChannels.direct().get();
+    }
+    @Bean
+    MessageChannel errorChannel() {
         return MessageChannels.direct().get();
     }
 
@@ -32,34 +35,64 @@ public class IntegrationConfiguration {
                 .requestMapping(m -> m.methods(HttpMethod.POST))
                 .requestPayloadType(String.class)
                 .requestChannel(directChannel())
-               // .replyChannel("httpResponse")
+                .errorChannel("errorChannel")
             .get()
         )
             .transform(t -> {
                 return "transofrm " + t;
             })
             .channel("queueChannel")
+
             .get();
     }
 
-    @MessagingGateway(defaultRequestChannel = "httpResponse")
-    public interface MyGateway {
-
-        String sendReceive(String in);
-
-    }
-
     @Bean
-    public IntegrationFlow handleMessage(MyGateway gateway) {
+    public IntegrationFlow handleMessage() {
         return IntegrationFlows.from("queueChannel")
             .wireTap(flow -> flow.handle(System.out::println))
-            .publishSubscribeChannel(publisher ->
-                publisher.subscribe(flow -> flow.handle(m -> {
-                    System.out.println("subscribed " + m.getPayload());
-                }))
+            .publishSubscribeChannel(publisher -> {
+                publisher.errorHandler(var1 -> {
+                    var1.printStackTrace();
+                })
+                    .subscribe(flow -> flow
+                        .handle(m -> {
+                            if (m.getPayload().toString().contains("user")) {
+                                throw new IllegalArgumentException("user found");
+                            }
+                            System.out.println("subscribed " + m.getPayload());
+                        })
+                    );
+                }
             )
+            .transform(t -> "")
+            .wireTap(flow -> flow.handle(m -> {
+                System.out.println(m.getHeaders().get("status"));
+            }))
             .enrichHeaders( c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.OK))
             .get();
     }
 
+    @Bean
+    IntegrationFlow exceptionOrErrorFlow() {
+        return IntegrationFlows.from("errorChannel")
+            .routeByException(r -> {
+                r.channelMapping(IllegalArgumentException.class, "errorChannel3");
+                r.defaultOutputToParentFlow();
+            })
+            .wireTap(f -> f.handle(m -> {
+                System.out.println("failed badly");
+            }))
+            .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.BAD_REQUEST))
+            .get();
+    }
+
+    @Bean
+    IntegrationFlow exceptionOrErrorFlow3() {
+        return IntegrationFlows.from("errorChannel3")
+            .wireTap(f -> f.handle(m -> {
+                System.out.println("failed badly 3");
+            }))
+            .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.BAD_REQUEST))
+            .get();
+    }
 }
