@@ -12,6 +12,9 @@ import org.springframework.integration.handler.LoggingHandler;
 import org.springframework.integration.http.HttpHeaders;
 import org.springframework.integration.http.dsl.Http;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHeaders;
+
+import java.util.Optional;
 
 
 @Configuration
@@ -50,6 +53,14 @@ public class IntegrationConfiguration {
     public IntegrationFlow handleMessage() {
         return IntegrationFlows.from("queueChannel")
             .wireTap(flow -> flow.handle(System.out::println))
+            .routeToRecipients( r -> {
+                r.recipientMessageSelector("errorChannel", m ->
+                     Optional.ofNullable(m.getHeaders().get(MessageHeaders.CONTENT_TYPE))
+                         .map(s -> s.toString())
+                         .map(s -> !s.contains("json"))
+                         .orElse(false));
+                r.defaultOutputToParentFlow();
+                })
             .publishSubscribeChannel(publisher -> {
                 publisher.errorHandler(var1 -> {
                     var1.printStackTrace();
