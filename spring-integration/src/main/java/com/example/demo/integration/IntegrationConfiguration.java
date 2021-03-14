@@ -82,7 +82,8 @@ public class IntegrationConfiguration {
             .wireTap(f -> f.handle(m -> {
                 System.out.println("failed badly");
             }))
-            .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.BAD_REQUEST))
+            .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.INTERNAL_SERVER_ERROR))
+            .transform(c -> c)
             .get();
     }
 
@@ -93,6 +94,7 @@ public class IntegrationConfiguration {
                 System.out.println("failed badly 3");
             }))
             .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.BAD_REQUEST))
+            .transform( t -> "failed")
             .get();
     }
 }
