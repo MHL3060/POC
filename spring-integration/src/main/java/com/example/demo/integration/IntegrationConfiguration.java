@@ -1,5 +1,6 @@
 package com.example.demo.integration;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -8,7 +9,6 @@ import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.integration.dsl.MessageChannels;
-import org.springframework.integration.handler.LoggingHandler;
 import org.springframework.integration.http.HttpHeaders;
 import org.springframework.integration.http.dsl.Http;
 import org.springframework.messaging.MessageChannel;
@@ -19,6 +19,7 @@ import java.util.Optional;
 
 @Configuration
 @EnableIntegration
+@Slf4j
 public class IntegrationConfiguration {
 
     // curl http://localhost:8080/tasks --data '{"username":"xyz","password":"xyz"}' -H 'Content-type: application/json'
@@ -52,7 +53,7 @@ public class IntegrationConfiguration {
     @Bean
     public IntegrationFlow handleMessage() {
         return IntegrationFlows.from("queueChannel")
-            .wireTap(flow -> flow.handle(System.out::println))
+            .wireTap(flow -> flow.handle(m -> log.info("{}", m)))
             .routeToRecipients( r -> {
                 r.recipientMessageSelector("errorChannel", m ->
                      Optional.ofNullable(m.getHeaders().get(MessageHeaders.CONTENT_TYPE))
@@ -70,14 +71,17 @@ public class IntegrationConfiguration {
                             if (m.getPayload().toString().contains("user")) {
                                 throw new IllegalArgumentException("user found");
                             }
-                            System.out.println("subscribed " + m.getPayload());
+                            try {
+                                Thread.sleep(10000);
+                            } catch(Exception e) {}
+                            log.info("subscribed {}", m.getPayload());
                         })
                     );
                 }
             )
             .transform(t -> "")
             .wireTap(flow -> flow.handle(m -> {
-                System.out.println(m.getHeaders().get("status"));
+                log.info("{}",m.getHeaders().get("status"));
             }))
             .enrichHeaders( c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.OK))
             .get();
@@ -91,7 +95,7 @@ public class IntegrationConfiguration {
                 r.defaultOutputToParentFlow();
             })
             .wireTap(f -> f.handle(m -> {
-                System.out.println("failed badly");
+                log.info("failed badly");
             }))
             .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.INTERNAL_SERVER_ERROR))
             .transform(c -> c)
@@ -102,7 +106,7 @@ public class IntegrationConfiguration {
     IntegrationFlow exceptionOrErrorFlow3() {
         return IntegrationFlows.from("errorChannel3")
             .wireTap(f -> f.handle(m -> {
-                System.out.println("failed badly 3");
+                log.info("failed badly 3");
             }))
             .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.BAD_REQUEST))
             .transform( t -> "failed")
