@@ -7,7 +7,6 @@ import org.springframework.integration.config.EnableIntegration;
 
 @SpringBootApplication
 @IntegrationComponentScan
-@EnableIntegration
 public class SpringIntegrationApplication {
 
 	public static void main(String[] args) {

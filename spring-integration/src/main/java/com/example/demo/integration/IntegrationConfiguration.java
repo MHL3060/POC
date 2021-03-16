@@ -1,6 +1,8 @@
 package com.example.demo.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -11,28 +13,41 @@ import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.integration.dsl.MessageChannels;
 import org.springframework.integration.http.HttpHeaders;
 import org.springframework.integration.http.dsl.Http;
+import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.support.ErrorMessage;
 
 import java.util.Optional;
 
 
 @Configuration
 @EnableIntegration
-@Slf4j
 public class IntegrationConfiguration {
 
+    Logger log = LoggerFactory.getLogger(IntegrationConfiguration.class);
     // curl http://localhost:8080/tasks --data '{"username":"xyz","password":"xyz"}' -H 'Content-type: application/json'
     @Bean
     MessageChannel directChannel() {
         return MessageChannels.direct().get();
     }
-    @Bean
-    MessageChannel errorChannel() {
-        return MessageChannels.direct().get();
-    }
 
     @Bean
+    public IntegrationFlow httpGateway() {
+        return IntegrationFlows.from(
+            Http.inboundGateway("/tasks")
+                .requestMapping(m -> m.methods(HttpMethod.POST))
+                .requestPayloadType(Logon.class)
+                .requestChannel(directChannel())
+                .errorChannel("errorChannel")
+                .get()
+        )
+            .channel("queueChannel")
+
+            .get();
+    }
+
+   /* @Bean
     public IntegrationFlow httpGateway() {
         return IntegrationFlows.from(
             Http.inboundGateway("/tasks")
@@ -48,7 +63,7 @@ public class IntegrationConfiguration {
             .channel("queueChannel")
 
             .get();
-    }
+    }*/
 
     @Bean
     public IntegrationFlow handleMessage() {
@@ -63,16 +78,13 @@ public class IntegrationConfiguration {
                 r.defaultOutputToParentFlow();
                 })
             .publishSubscribeChannel(publisher -> {
-                publisher.errorHandler(var1 -> {
-                    var1.printStackTrace();
-                })
-                    .subscribe(flow -> flow
+                publisher.subscribe(flow -> flow
                         .handle(m -> {
                             if (m.getPayload().toString().contains("user")) {
                                 throw new IllegalArgumentException("user found");
                             }
                             try {
-                                Thread.sleep(10000);
+                                Thread.sleep(1000);
                             } catch(Exception e) {}
                             log.info("subscribed {}", m.getPayload());
                         })
@@ -85,6 +97,19 @@ public class IntegrationConfiguration {
             }))
             .enrichHeaders( c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.OK))
             .get();
+    }
+
+    @Bean
+    public IntegrationFlow outFlow() {
+        return IntegrationFlows.from("queueChannel")
+            .handle(
+                Http.outboundGateway("http://localhost:8000")
+                .httpMethod(HttpMethod.POST)
+                .expectedResponseType(String.class)
+                .get()
+            )
+            .get();
+
     }
 
     @Bean
@@ -106,10 +131,10 @@ public class IntegrationConfiguration {
     IntegrationFlow exceptionOrErrorFlow3() {
         return IntegrationFlows.from("errorChannel3")
             .wireTap(f -> f.handle(m -> {
-                log.info("failed badly 3");
+                log.info("failed badly 3 headers: {}, payload: {}", m.getHeaders(), m.getPayload());
             }))
             .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.BAD_REQUEST))
-            .transform( t -> "failed")
+            .transform(t -> "failed " + t)
             .get();
     }
 }
