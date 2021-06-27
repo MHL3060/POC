@@ -1,41 +1,37 @@
 package com.example.demo.integration;
 
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.integration.dsl.MessageChannels;
 import org.springframework.integration.http.HttpHeaders;
 import org.springframework.integration.http.dsl.Http;
-import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHeaders;
-import org.springframework.messaging.support.ErrorMessage;
 
 import java.util.Optional;
+import java.util.concurrent.Executors;
 
 
 @Configuration
-@EnableIntegration
 public class IntegrationConfiguration {
 
     Logger log = LoggerFactory.getLogger(IntegrationConfiguration.class);
-    // curl http://localhost:8080/tasks --data '{"username":"xyz","password":"xyz"}' -H 'Content-type: application/json'
+
     @Bean
     MessageChannel directChannel() {
         return MessageChannels.direct().get();
     }
 
     @Bean
-    public IntegrationFlow httpGateway() {
+    public IntegrationFlow httpAsyncGateway() {
         return IntegrationFlows.from(
-            Http.inboundGateway("/tasks")
+            Http.inboundGateway("/asyncTasks")
                 .requestMapping(m -> m.methods(HttpMethod.POST))
                 .requestPayloadType(Logon.class)
                 .requestChannel(directChannel())
@@ -43,27 +39,8 @@ public class IntegrationConfiguration {
                 .get()
         )
             .channel("queueChannel")
-
             .get();
     }
-
-   /* @Bean
-    public IntegrationFlow httpGateway() {
-        return IntegrationFlows.from(
-            Http.inboundGateway("/tasks")
-                .requestMapping(m -> m.methods(HttpMethod.POST))
-                .requestPayloadType(String.class)
-                .requestChannel(directChannel())
-                .errorChannel("errorChannel")
-            .get()
-        )
-            .transform(t -> {
-                return "transofrm " + t;
-            })
-            .channel("queueChannel")
-
-            .get();
-    }*/
 
     @Bean
     public IntegrationFlow handleMessage() {
@@ -78,17 +55,21 @@ public class IntegrationConfiguration {
                 r.defaultOutputToParentFlow();
                 })
             .publishSubscribeChannel(publisher -> {
+                publisher.subscribe(flow ->
+                        flow.channel(c -> c.executor(Executors.newCachedThreadPool()))
+                        .channel("own"))
+                        .get();
                 publisher.subscribe(flow -> flow
+                        .channel(c -> c.executor(Executors.newCachedThreadPool()))
                         .handle(m -> {
-                            if (m.getPayload().toString().contains("user")) {
-                                throw new IllegalArgumentException("user found");
-                            }
                             try {
-                                Thread.sleep(1000);
-                            } catch(Exception e) {}
+                                sleepNoException(100000);
+                                System.out.println("done");
+
+                            } catch(Exception e) { e.printStackTrace();}
                             log.info("subscribed {}", m.getPayload());
                         })
-                    );
+                    ).get();
                 }
             )
             .transform(t -> "")
@@ -96,27 +77,28 @@ public class IntegrationConfiguration {
                 log.info("{}",m.getHeaders().get("status"));
             }))
             .enrichHeaders( c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.OK))
+            .enrichHeaders( c -> c.header("custom", "all_good"))
             .get();
     }
 
     @Bean
     public IntegrationFlow outFlow() {
-        return IntegrationFlows.from("queueChannel")
+        return IntegrationFlows.from("own")
             .handle(
                 Http.outboundGateway("http://localhost:8000")
-                .httpMethod(HttpMethod.POST)
-                .expectedResponseType(String.class)
-                .get()
+                    .httpMethod(HttpMethod.POST)
+                    //.errorHandler(new DefaultResponseErrorHandler())
+                    .expectedResponseType(String.class)
+                    .get()
             )
             .get();
-
     }
 
     @Bean
     IntegrationFlow exceptionOrErrorFlow() {
         return IntegrationFlows.from("errorChannel")
             .routeByException(r -> {
-                r.channelMapping(IllegalArgumentException.class, "errorChannel3");
+                r.channelMapping(IllegalArgumentException.class, "badRequest");
                 r.defaultOutputToParentFlow();
             })
             .wireTap(f -> f.handle(m -> {
@@ -129,12 +111,18 @@ public class IntegrationConfiguration {
 
     @Bean
     IntegrationFlow exceptionOrErrorFlow3() {
-        return IntegrationFlows.from("errorChannel3")
+        return IntegrationFlows.from("badRequest")
             .wireTap(f -> f.handle(m -> {
                 log.info("failed badly 3 headers: {}, payload: {}", m.getHeaders(), m.getPayload());
             }))
             .enrichHeaders(c -> c.header(HttpHeaders.STATUS_CODE, HttpStatus.BAD_REQUEST))
             .transform(t -> "failed " + t)
             .get();
+    }
+
+    private void sleepNoException(long millisecond) {
+        try {
+            Thread.sleep(millisecond);
+        } catch(Exception e) {}
     }
 }
