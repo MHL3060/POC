@@ -60,10 +60,9 @@ public class IntegrationConfiguration {
                         .channel("own"))
                         .get();
                 publisher.subscribe(flow -> flow
-                        .channel(c -> c.executor(Executors.newCachedThreadPool()))
                         .handle(m -> {
                             try {
-                                sleepNoException(100000);
+                                sleepNoException(5000);
                                 System.out.println("done");
 
                             } catch(Exception e) { e.printStackTrace();}

@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.integration.annotation.IntegrationComponentScan;
 import org.springframework.integration.config.EnableIntegration;
+import org.springframework.integration.config.EnableIntegrationManagement;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.integration.dsl.MessageChannels;
@@ -18,6 +19,7 @@ import org.springframework.messaging.MessageChannel;
 @IntegrationComponentScan
 @EnableIntegration
 @EnableIntegrationGraphController(allowedOrigins = "*")
+@EnableIntegrationManagement
 public class SpringIntegrationApplication {
 
 	public static void main(String[] args) {
