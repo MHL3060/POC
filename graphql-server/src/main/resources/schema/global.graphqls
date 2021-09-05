@@ -1,0 +1,13 @@
+scalar DateTime
+
+type User {
+    username: String
+    firstName: String
+    lastName: String
+    lastUpdated: DateTime
+
+}
+
+type Query {
+    findUser(username: String): User
+}

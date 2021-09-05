@@ -1,0 +1,7 @@
+query {
+    findUser(username: "test") {
+        firstName
+        username
+        lastName
+    }
+}

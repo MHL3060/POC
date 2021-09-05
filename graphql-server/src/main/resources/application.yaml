@@ -1,0 +1,42 @@
+graphql:
+    servlet:
+        # Sets if GraphQL servlet should be created and exposed. If not specified defaults to "true".
+        enabled: true
+        # Sets the path where GraphQL servlet will be exposed. If not specified defaults to "/graphql"
+        mapping: /graphql
+        cors-enabled: true
+        # if you want to @ExceptionHandler annotation for custom GraphQLErrors
+        exception-handlers-enabled: true
+        context-setting: PER_REQUEST_WITH_INSTRUMENTATION
+        # Sets if asynchronous operations are supported for GraphQL requests. If not specified defaults to true.
+        async-mode-enabled: true
+    tools:
+        schema-location-pattern: "schema/**/*.graphqls"
+    extended-scalars: DateTime, Date, Long, Time
+altair:
+    enabled: true
+    mapping: /altair
+    subscriptions:
+        timeout: 30
+        reconnect: false
+    static:
+        base-path: /
+    page-title: Altair
+    cdn:
+        enabled: false
+        version: 4.0.2
+    options:
+        endpoint-url: /graphql
+        subscriptions-endpoint: /subscriptions
+        initial-settings:
+            theme: dracula
+    resources:
+        initial-query: defaultQuery.graphql
+logging:
+    level:
+        org.springframework: INFO
+        graphql: DEBUG
+
+security:
+    enable:
+        csrf: false
