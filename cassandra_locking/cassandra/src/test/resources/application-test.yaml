@@ -1,0 +1,15 @@
+spring:
+  cassandra:
+    keyspace-name: tux_poc
+    username: cassandra
+    password: cassandra
+    contact-points: atlin.local
+    local-datacenter: datacenter1
+    port: 9042
+
+logging:
+  level:
+    root: debug
+cassandra:
+  migration:
+    keyspace-name: ${spring.cassandra.keyspace-name}
